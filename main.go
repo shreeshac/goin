@@ -1,8 +1,10 @@
 package main
 
 import (
+	"crypto/sha256"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"mime"
@@ -13,10 +15,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/blevesearch/bleve"
 	lpt "gopkg.in/GeertJohan/go.leptonica.v1"
 	gts "gopkg.in/GeertJohan/go.tesseract.v1"
-
-	"github.com/blevesearch/bleve"
 )
 
 /*
@@ -33,6 +34,13 @@ import (
     3.
 */
 
+var tessData = flag.String("tess_data_prefix", defaultTessData(), "Location of the tesseract data")
+var help = flag.Bool("help", false, "Show this help")
+var pdfDensity = flag.Int("pdfdensity", 300, "density to use when converting pdf's to tiffs")
+var rootPath = flag.String("root_path", "/", "Root path for indexing")
+var indexLocation = flag.String("index_location", "index.bleve", "Location for the bleve index rooted at the rootPath")
+var hashLocation = flag.String("hash_location", ".indexed_files", "Location where the indexed file hashes are stored.")
+
 func defaultTessData() (possible string) {
 	possible = os.Getenv("TESSDATA_PREFIX")
 	if possible == "" {
@@ -40,12 +48,6 @@ func defaultTessData() (possible string) {
 	}
 	return
 }
-
-var tessData = flag.String("tess_data_prefix", defaultTessData(), "Location of the tesseract data")
-var help = flag.Bool("help", false, "Show this help")
-var pdfDensity = flag.Int("pdfdensity", 300, "density to use when converting pdf's to tiffs")
-var rootPath = flag.String("root_path", "/", "Root path for indexing")
-var indexLocation = flag.String("index_location", "index.bleve", "Location for the bleve index rooted at the rootPath")
 
 func getPixImage(f string) (*lpt.Pix, error) {
 	log.Print("extension: ", filepath.Ext(f))
@@ -75,6 +77,7 @@ type FileData struct {
 	FileName     string
 	MimeType     string
 	IndexTime    time.Time
+	Hash         []byte
 	Text         string
 }
 
@@ -108,6 +111,7 @@ func ocrImageFile(file string) (string, error) {
 
 func getPlainTextContent(file string) (string, error) {
 	fd, err := os.Open(file)
+	defer fd.Close()
 	if err != nil {
 		return "", err
 	}
@@ -124,6 +128,9 @@ func ProcessFile(file string) (*FileData, error) {
 	// TODO(jwall): Do I want to do anything with the params?
 	mt, _, err := mime.ParseMediaType(mime.TypeByExtension(ext))
 	parts := strings.SplitN(mt, "/", 2)
+	if err != nil {
+		return nil, fmt.Errorf("Error hashing file %q", err)
+	}
 	fd := FileData{
 		MimeType:     mt,
 		FileName:     filepath.Base(file),
@@ -178,6 +185,60 @@ func GetIndex(indexFile string) (bleve.Index, error) {
 	return index, nil
 }
 
+func HashFile(file string) ([]byte, error) {
+	h := sha256.New()
+	f, err := os.Open(file)
+	defer f.Close()
+	if err != nil {
+		return nil, err
+	}
+	_, err = io.Copy(h, f)
+	if err != nil {
+		return nil, err
+	}
+	return h.Sum([]byte{}), nil
+}
+
+func CheckHash(file string, hash []byte, hashDir string) (bool, error) {
+	hashFile := path.Join(hashDir, file)
+	if _, err := os.Stat(hashFile); os.IsNotExist(err) {
+		return false, nil
+	}
+	f, err := os.Open(hashFile)
+	defer f.Close()
+	if err != nil {
+		return false, err
+	}
+	bs, err := ioutil.ReadAll(f)
+	if err != nil {
+		return false, err
+	}
+	if len(bs) != len(hash) {
+		return false, nil
+	}
+	for i, b := range bs {
+		if b != hash[i] {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func WriteFileHash(file string, hash []byte, hashDir string) error {
+	if _, err := os.Stat(hashDir); os.IsNotExist(err) {
+		if err := os.MkdirAll(hashDir, os.ModeDir|os.ModePerm); err != nil {
+			return err
+		}
+	}
+	fd, err := os.Create(filepath.Join(hashDir, file))
+	defer fd.Close()
+	if err != nil {
+		return err
+	}
+	_, err = fd.Write(hash)
+	return err
+}
+
 func main() {
 	flag.Parse()
 
@@ -185,17 +246,31 @@ func main() {
 		flag.PrintDefaults()
 		os.Exit(0)
 	}
+
 	indexFile := path.Join(*rootPath, *indexLocation)
+	hashDir := path.Join(*rootPath, *hashLocation)
 	index, err := GetIndex(indexFile)
 	if err != nil {
 		log.Fatalln(err)
 	}
+	defer index.Close()
 	for _, file := range flag.Args() {
+		h, err := HashFile(file)
+		if ok, _ := CheckHash(filepath.Base(file), h, hashDir); ok {
+			log.Printf("Already indexed %q", file)
+			continue
+		}
+		// TODO(jwall): Check the hash against the last processed index.
 		fd, err := ProcessFile(file)
 		if err != nil {
 			log.Printf("Error reading file %q, %v\n", file, err)
 		}
 		log.Printf("Indexing %q", fd.FullPath)
-		index.Index(fd.FileName, fd)
+		if err := index.Index(fd.FileName, fd); err != nil {
+			log.Printf("Error writing to index: %q", err)
+		}
+		if err := WriteFileHash(fd.FileName, h, hashDir); err != nil {
+			log.Printf("Error writing file hash %q", err)
+		}
 	}
 }
