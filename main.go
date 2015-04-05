@@ -14,6 +14,15 @@ import (
 	// TODO(jwall): import "github.com/blevesearch/bleve"
 )
 
+/*
+  DevNotes:
+
+  1. We need to detect when we've already scanned a document. Probably using a hash.
+  2. We need to implement the full text indexing of the documents.
+  3. We need a standard way to query the documents.
+  4. Flesh out a way to handle various file types easily.
+*/
+
 func defaultTessData() (possible string) {
 	possible = os.Getenv("TESSDATA_PREFIX")
 	if possible == "" {
