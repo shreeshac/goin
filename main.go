@@ -16,7 +16,7 @@ import (
 	lpt "gopkg.in/GeertJohan/go.leptonica.v1"
 	gts "gopkg.in/GeertJohan/go.tesseract.v1"
 
-	// TODO(jwall): import "github.com/blevesearch/bleve"
+	"github.com/blevesearch/bleve"
 )
 
 /*
@@ -44,7 +44,8 @@ func defaultTessData() (possible string) {
 var tessData = flag.String("tess_data_prefix", defaultTessData(), "Location of the tesseract data")
 var help = flag.Bool("help", false, "Show this help")
 var pdfDensity = flag.Int("pdfdensity", 300, "density to use when converting pdf's to tiffs")
-var rootPath = flag.String("root_path", "", "Root path for indexing")
+var rootPath = flag.String("root_path", "/", "Root path for indexing")
+var indexLocation = flag.String("index_location", "index.bleve", "Location for the bleve index rooted at the rootPath")
 
 func getPixImage(f string) (*lpt.Pix, error) {
 	log.Print("extension: ", filepath.Ext(f))
@@ -130,7 +131,7 @@ func ProcessFile(file string) (*FileData, error) {
 		RelativePath: strings.Replace(filepath.Dir(file), path.Clean(*rootPath)+"/", "", 1),
 		IndexTime:    time.Now(),
 	}
-	log.Printf("mime category: %q", parts[0])
+	//log.Printf("Detected mime category: %q", parts[0])
 	// TODO(jeremy): We need an abstract file type handler interface and
 	// a way to register them.
 	switch parts[0] {
@@ -159,6 +160,24 @@ func ProcessFile(file string) (*FileData, error) {
 	return &fd, nil
 }
 
+func GetIndex(indexFile string) (bleve.Index, error) {
+	// TODO(jwall): An abstract indexing interface?
+	var index bleve.Index
+	if _, err := os.Stat(indexFile); os.IsNotExist(err) {
+		mapping := bleve.NewIndexMapping()
+		log.Printf("Creating new index %q", indexFile)
+		if index, err = bleve.New(indexFile, mapping); err != nil {
+			return nil, fmt.Errorf("Error creating index %q\n", err)
+		}
+	} else {
+		log.Printf("Opening index %q", indexFile)
+		if index, err = bleve.Open(indexFile); err != nil {
+			return nil, fmt.Errorf("Error opening index %q\n", err)
+		}
+	}
+	return index, nil
+}
+
 func main() {
 	flag.Parse()
 
@@ -166,12 +185,17 @@ func main() {
 		flag.PrintDefaults()
 		os.Exit(0)
 	}
+	indexFile := path.Join(*rootPath, *indexLocation)
+	index, err := GetIndex(indexFile)
+	if err != nil {
+		log.Fatalln(err)
+	}
 	for _, file := range flag.Args() {
-		// TODO(jwall): Handle pdf
 		fd, err := ProcessFile(file)
 		if err != nil {
-			fmt.Printf("Error reading file %q, %v\n", file, err)
+			log.Printf("Error reading file %q, %v\n", file, err)
 		}
-		fmt.Println(fd)
+		log.Printf("Indexing %q", fd.FullPath)
+		index.Index(fd.FileName, fd)
 	}
 }
