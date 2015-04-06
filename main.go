@@ -20,26 +20,17 @@ import (
 	gts "gopkg.in/GeertJohan/go.tesseract.v1"
 )
 
-/*
-  DevNotes:
-
-  1. We need to detect when we've already scanned a document. Probably using a hash.
-  2. We need to implement the full text indexing of the documents.
-  3. We need a standard way to query the documents.
-  4. Flesh out a way to handle various file types easily.
-
-  Indexing:
-    1. Path based off of a root path.
-    2. mime-type
-    3.
-*/
-
-var tessData = flag.String("tess_data_prefix", defaultTessData(), "Location of the tesseract data")
-var help = flag.Bool("help", false, "Show this help")
-var pdfDensity = flag.Int("pdfdensity", 300, "density to use when converting pdf's to tiffs")
-var rootPath = flag.String("root_path", "/", "Root path for indexing")
-var indexLocation = flag.String("index_location", "index.bleve", "Location for the bleve index rooted at the rootPath")
+var tessData = flag.String("tess_data_prefix", defaultTessData(), "Location of the tesseract data.")
+var help = flag.Bool("help", false, "Show this help.")
+var pdfDensity = flag.Int("pdfdensity", 300, "density to use when converting pdf's to tiffs.")
+var indexLocation = flag.String("index_location", "index.bleve", "Location for the bleve index.")
 var hashLocation = flag.String("hash_location", ".indexed_files", "Location where the indexed file hashes are stored.")
+
+func init() {
+	// Ensure that org-mode is registered as a mime type.
+	mime.AddExtensionType(".org", "text/x-org")
+	mime.AddExtensionType(".org_archive", "text/x-org")
+}
 
 func defaultTessData() (possible string) {
 	possible = os.Getenv("TESSDATA_PREFIX")
@@ -50,13 +41,12 @@ func defaultTessData() (possible string) {
 }
 
 func getPixImage(f string) (*lpt.Pix, error) {
-	log.Print("extension: ", filepath.Ext(f))
+	//log.Print("extension: ", filepath.Ext(f))
 	if filepath.Ext(f) == ".pdf" {
-		// TODO(jwall): handle pdfs by converting them first.
 		if cmdName, err := exec.LookPath("convert"); err == nil {
 			tmpFName := filepath.Join(os.TempDir(), filepath.Base(f)+".tif")
 			log.Printf("converting %q to %q", f, tmpFName)
-			cmd := exec.Command(cmdName, "-density", "300", f, "-depth", "8", tmpFName)
+			cmd := exec.Command(cmdName, "-density", fmt.Sprint(*pdfDensity), f, "-depth", "8", tmpFName)
 			out, err := cmd.CombinedOutput()
 			if err != nil {
 				log.Printf("output: %q", out)
@@ -72,13 +62,11 @@ func getPixImage(f string) (*lpt.Pix, error) {
 }
 
 type FileData struct {
-	RelativePath string
-	FullPath     string
-	FileName     string
-	MimeType     string
-	IndexTime    time.Time
-	Hash         []byte
-	Text         string
+	FullPath  string
+	FileName  string
+	MimeType  string
+	IndexTime time.Time
+	Text      string
 }
 
 func ocrImageFile(file string) (string, error) {
@@ -132,11 +120,11 @@ func ProcessFile(file string) (*FileData, error) {
 		return nil, fmt.Errorf("Error hashing file %q", err)
 	}
 	fd := FileData{
-		MimeType:     mt,
-		FileName:     filepath.Base(file),
-		FullPath:     path.Clean(file),
-		RelativePath: strings.Replace(filepath.Dir(file), path.Clean(*rootPath)+"/", "", 1),
-		IndexTime:    time.Now(),
+		MimeType: mt,
+		FileName: filepath.Base(file),
+		FullPath: path.Clean(file),
+		// How to index this properly?
+		IndexTime: time.Now(),
 	}
 	//log.Printf("Detected mime category: %q", parts[0])
 	// TODO(jeremy): We need an abstract file type handler interface and
@@ -239,6 +227,44 @@ func WriteFileHash(file string, hash []byte, hashDir string) error {
 	return err
 }
 
+func IndexFile(file string, hashDir string, index bleve.Index) {
+	log.Printf("Processing file: %q", file)
+	h, err := HashFile(file)
+	if ok, _ := CheckHash(filepath.Base(file), h, hashDir); ok {
+		log.Printf("Already indexed %q", file)
+		return
+	}
+	fd, err := ProcessFile(file)
+	if err != nil {
+		log.Printf("Error Processing file %q, %v\n", file, err)
+		return
+	}
+	log.Printf("Indexing %q", fd.FullPath)
+	if err := index.Index(fd.FileName, fd); err != nil {
+		log.Printf("Error writing to index: %q", err)
+		return
+	}
+	if err := WriteFileHash(fd.FileName, h, hashDir); err != nil {
+		log.Printf("Error writing file hash %q", err)
+		return
+	}
+	return
+}
+
+func IndexDirectory(dir string, hashDir string, index bleve.Index) {
+	log.Printf("Processing directory: %q", dir)
+	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if info.IsDir() {
+			if strings.HasPrefix(info.Name(), ".") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		IndexFile(path, hashDir, index)
+		return nil
+	})
+}
+
 func main() {
 	flag.Parse()
 
@@ -247,30 +273,24 @@ func main() {
 		os.Exit(0)
 	}
 
-	indexFile := path.Join(*rootPath, *indexLocation)
-	hashDir := path.Join(*rootPath, *hashLocation)
-	index, err := GetIndex(indexFile)
+	index, err := GetIndex(*indexLocation)
 	if err != nil {
 		log.Fatalln(err)
 	}
 	defer index.Close()
+
 	for _, file := range flag.Args() {
-		h, err := HashFile(file)
-		if ok, _ := CheckHash(filepath.Base(file), h, hashDir); ok {
-			log.Printf("Already indexed %q", file)
+		fi, err := os.Stat(file)
+		if os.IsNotExist(err) {
 			continue
 		}
-		// TODO(jwall): Check the hash against the last processed index.
-		fd, err := ProcessFile(file)
 		if err != nil {
-			log.Printf("Error reading file %q, %v\n", file, err)
+			log.Printf("Error Stat(ing) file %q", err)
 		}
-		log.Printf("Indexing %q", fd.FullPath)
-		if err := index.Index(fd.FileName, fd); err != nil {
-			log.Printf("Error writing to index: %q", err)
-		}
-		if err := WriteFileHash(fd.FileName, h, hashDir); err != nil {
-			log.Printf("Error writing file hash %q", err)
+		if fi.IsDir() {
+			IndexDirectory(file, *hashLocation, index)
+		} else {
+			IndexFile(file, *hashLocation, index)
 		}
 	}
 }
