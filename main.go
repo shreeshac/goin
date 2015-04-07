@@ -61,12 +61,17 @@ func getPixImage(f string) (*lpt.Pix, error) {
 	return lpt.NewPixFromFile(f)
 }
 
+// TODO(jwall): Implement the Classifier interface.
 type FileData struct {
 	FullPath  string
 	FileName  string
 	MimeType  string
 	IndexTime time.Time
 	Text      string
+}
+
+func (fd *FileData) Type() string {
+	return fd.MimeType
 }
 
 func ocrImageFile(file string) (string, error) {
@@ -155,24 +160,7 @@ func ProcessFile(file string) (*FileData, error) {
 	return &fd, nil
 }
 
-func GetIndex(indexFile string) (bleve.Index, error) {
-	// TODO(jwall): An abstract indexing interface?
-	var index bleve.Index
-	if _, err := os.Stat(indexFile); os.IsNotExist(err) {
-		mapping := bleve.NewIndexMapping()
-		log.Printf("Creating new index %q", indexFile)
-		if index, err = bleve.New(indexFile, mapping); err != nil {
-			return nil, fmt.Errorf("Error creating index %q\n", err)
-		}
-	} else {
-		log.Printf("Opening index %q", indexFile)
-		if index, err = bleve.Open(indexFile); err != nil {
-			return nil, fmt.Errorf("Error opening index %q\n", err)
-		}
-	}
-	return index, nil
-}
-
+// Hash optimizations
 func HashFile(file string) ([]byte, error) {
 	h := sha256.New()
 	f, err := os.Open(file)
@@ -227,8 +215,15 @@ func WriteFileHash(file string, hash []byte, hashDir string) error {
 	return err
 }
 
+// Entry points
 func IndexFile(file string, hashDir string, index bleve.Index) {
 	log.Printf("Processing file: %q", file)
+	fi, err := os.Stat(file)
+	if fi.Size() > 1000000 {
+		log.Printf("File too large to index %q", file)
+		return
+	}
+
 	h, err := HashFile(file)
 	if ok, _ := CheckHash(filepath.Base(file), h, hashDir); ok {
 		log.Printf("Already indexed %q", file)
@@ -255,7 +250,8 @@ func IndexDirectory(dir string, hashDir string, index bleve.Index) {
 	log.Printf("Processing directory: %q", dir)
 	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if info.IsDir() {
-			if strings.HasPrefix(info.Name(), ".") {
+			if strings.HasPrefix(info.Name(), ".") ||
+				path == *indexLocation || path == *hashLocation {
 				return filepath.SkipDir
 			}
 			return nil
