@@ -1,15 +1,11 @@
 package main
 
 import (
-	"crypto/sha256"
 	"flag"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"log"
 	"mime"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 )
@@ -44,94 +40,18 @@ var isQuery = flag.Bool("query", false, "Run a query instead of indexing")
 var isIndex = flag.Bool("index", false, "Run an indexing operation instead of querying")
 var mimeTypeMappings = mimeFlag("mime", "Add a custom mime type mapping.")
 
-// Hash optimizations
-// TODO(jwall): Where should the Hash Optimizations be abstracted to?
-func HashFile(file string) ([]byte, error) {
-	h := sha256.New()
-	f, err := os.Open(file)
-	defer f.Close()
-	if err != nil {
-		return nil, err
-	}
-	_, err = io.Copy(h, f)
-	if err != nil {
-		return nil, err
-	}
-	return h.Sum([]byte{}), nil
-}
-
-func CheckHash(file string, hash []byte, hashDir string) (bool, error) {
-	hashFile := path.Join(hashDir, file)
-	if _, err := os.Stat(hashFile); os.IsNotExist(err) {
-		return false, nil
-	}
-	f, err := os.Open(hashFile)
-	defer f.Close()
-	if err != nil {
-		return false, err
-	}
-	bs, err := ioutil.ReadAll(f)
-	if err != nil {
-		return false, err
-	}
-	if len(bs) != len(hash) {
-		return false, nil
-	}
-	for i, b := range bs {
-		if b != hash[i] {
-			return false, nil
-		}
-	}
-	return true, nil
-}
-
-func WriteFileHash(file string, hash []byte, hashDir string) error {
-	if _, err := os.Stat(hashDir); os.IsNotExist(err) {
-		if err := os.MkdirAll(hashDir, os.ModeDir|os.ModePerm); err != nil {
-			return err
-		}
-	}
-	fd, err := os.Create(filepath.Join(hashDir, file))
-	defer fd.Close()
-	if err != nil {
-		return err
-	}
-	_, err = fd.Write(hash)
-	return err
-}
-
 // Entry points
-func IndexFile(file string, hashDir string, p FileProcessor, index Index) {
+func IndexFile(file string, p FileProcessor) {
 	log.Printf("Processing file: %q", file)
-	fi, err := os.Stat(file)
-	if fi.Size() > 1000000 {
-		log.Printf("File too large to index %q", file)
-		return
-	}
-
-	h, err := HashFile(file)
-	if ok, _ := CheckHash(filepath.Base(file), h, hashDir); ok {
-		log.Printf("Already indexed %q", file)
-		return
-	}
-	fd, err := p.Process(file)
+	err := p.Process(file)
 	if err != nil {
 		log.Printf("Error Processing file %q, %v\n", file, err)
-		return
-	}
-	log.Printf("Indexing %q", fd.FullPath)
-	if err := index.Index(fd); err != nil {
-		log.Printf("Error writing to index: %q", err)
-		return
-	}
-	if err := WriteFileHash(fd.FileName, h, hashDir); err != nil {
-		log.Printf("Error writing file hash %q", err)
 		return
 	}
 	return
 }
 
-func IndexDirectory(dir string, hashDir string, p FileProcessor, index Index) {
+func IndexDirectory(dir string, p FileProcessor) {
 	log.Printf("Processing directory: %q", dir)
 	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if info.IsDir() {
@@ -141,7 +61,7 @@ func IndexDirectory(dir string, hashDir string, p FileProcessor, index Index) {
 			}
 			return nil
 		}
-		IndexFile(path, hashDir, p, index)
+		IndexFile(path, p)
 		return nil
 	})
 }
@@ -181,7 +101,7 @@ func main() {
 		fmt.Println(result)
 		return
 	} else if *isIndex {
-		p := NewProcessor()
+		p := NewProcessor(*hashLocation, index)
 		for _, file := range flag.Args() {
 			fi, err := os.Stat(file)
 			if os.IsNotExist(err) {
@@ -191,9 +111,9 @@ func main() {
 				log.Printf("Error Stat(ing) file %q", err)
 			}
 			if fi.IsDir() {
-				IndexDirectory(file, *hashLocation, p, index)
+				IndexDirectory(file, p)
 			} else {
-				IndexFile(file, *hashLocation, p, index)
+				IndexFile(file, p)
 			}
 		}
 	}
