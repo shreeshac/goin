@@ -7,11 +7,33 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"mime"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
 )
+
+type StringMapFlag map[string]string
+
+func (v StringMapFlag) String() string {
+	return fmt.Sprint(map[string]string(v))
+}
+
+func (v StringMapFlag) Set(s string) error {
+	parts := strings.SplitN(s, "=", 2)
+	if len(parts) < 2 {
+		return fmt.Errorf("Invalid mimetype mapping")
+	}
+	v[parts[0]] = parts[1]
+	return nil
+}
+
+func mimeFlag(name, usage string) StringMapFlag {
+	mimeTypeMappings := StringMapFlag{}
+	flag.Var(mimeTypeMappings, name, usage)
+	return mimeTypeMappings
+}
 
 var tessData = flag.String("tess_data_prefix", defaultTessData(), "Location of the tesseract data.")
 var help = flag.Bool("help", false, "Show this help.")
@@ -20,8 +42,10 @@ var indexLocation = flag.String("index_location", "index.bleve", "Location for t
 var hashLocation = flag.String("hash_location", ".indexed_files", "Location where the indexed file hashes are stored.")
 var isQuery = flag.Bool("query", false, "Run a query instead of indexing")
 var isIndex = flag.Bool("index", false, "Run an indexing operation instead of querying")
+var mimeTypeMappings = mimeFlag("mime", "Add a custom mime type mapping.")
 
 // Hash optimizations
+// TODO(jwall): Where should the Hash Optimizations be abstracted to?
 func HashFile(file string) ([]byte, error) {
 	h := sha256.New()
 	f, err := os.Open(file)
@@ -136,6 +160,12 @@ func main() {
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
+
+	for k, v := range mimeTypeMappings {
+		log.Printf("Adding mime-type mapping for extension %q=%q", k, v)
+		mime.AddExtensionType(k, v)
+	}
+
 	index, err := NewIndex(*indexLocation)
 	if err != nil {
 		log.Fatalln(err)
