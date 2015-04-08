@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/blevesearch/bleve"
 	lpt "gopkg.in/GeertJohan/go.leptonica.v1"
 	gts "gopkg.in/GeertJohan/go.tesseract.v1"
 )
@@ -25,6 +24,8 @@ var help = flag.Bool("help", false, "Show this help.")
 var pdfDensity = flag.Int("pdfdensity", 300, "density to use when converting pdf's to tiffs.")
 var indexLocation = flag.String("index_location", "index.bleve", "Location for the bleve index.")
 var hashLocation = flag.String("hash_location", ".indexed_files", "Location where the indexed file hashes are stored.")
+var isQuery = flag.Bool("query", false, "Run a query instead of indexing")
+var isIndex = flag.Bool("index", false, "Run an indexing operation instead of querying")
 
 func init() {
 	// Ensure that org-mode is registered as a mime type.
@@ -216,7 +217,7 @@ func WriteFileHash(file string, hash []byte, hashDir string) error {
 }
 
 // Entry points
-func IndexFile(file string, hashDir string, index bleve.Index) {
+func IndexFile(file string, hashDir string, index Index) {
 	log.Printf("Processing file: %q", file)
 	fi, err := os.Stat(file)
 	if fi.Size() > 1000000 {
@@ -235,7 +236,7 @@ func IndexFile(file string, hashDir string, index bleve.Index) {
 		return
 	}
 	log.Printf("Indexing %q", fd.FullPath)
-	if err := index.Index(fd.FileName, fd); err != nil {
+	if err := index.Index(fd); err != nil {
 		log.Printf("Error writing to index: %q", err)
 		return
 	}
@@ -246,7 +247,7 @@ func IndexFile(file string, hashDir string, index bleve.Index) {
 	return
 }
 
-func IndexDirectory(dir string, hashDir string, index bleve.Index) {
+func IndexDirectory(dir string, hashDir string, index Index) {
 	log.Printf("Processing directory: %q", dir)
 	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if info.IsDir() {
@@ -269,24 +270,39 @@ func main() {
 		os.Exit(0)
 	}
 
-	index, err := GetIndex(*indexLocation)
+	if !(*isQuery) || !(*isIndex) {
+		fmt.Println("One of --query or --index must be passed")
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+	index, err := NewIndex(*indexLocation)
 	if err != nil {
 		log.Fatalln(err)
 	}
 	defer index.Close()
 
-	for _, file := range flag.Args() {
-		fi, err := os.Stat(file)
-		if os.IsNotExist(err) {
-			continue
-		}
+	if *isQuery {
+		result, err := index.Query(flag.Args())
 		if err != nil {
-			log.Printf("Error Stat(ing) file %q", err)
+			log.Printf("Error: %q", err)
+			os.Exit(1)
 		}
-		if fi.IsDir() {
-			IndexDirectory(file, *hashLocation, index)
-		} else {
-			IndexFile(file, *hashLocation, index)
+		fmt.Println(result)
+		return
+	} else if *isIndex {
+		for _, file := range flag.Args() {
+			fi, err := os.Stat(file)
+			if os.IsNotExist(err) {
+				continue
+			}
+			if err != nil {
+				log.Printf("Error Stat(ing) file %q", err)
+			}
+			if fi.IsDir() {
+				IndexDirectory(file, *hashLocation, index)
+			} else {
+				IndexFile(file, *hashLocation, index)
+			}
 		}
 	}
 }
