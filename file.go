@@ -32,6 +32,12 @@ func defaultTessData() (possible string) {
 	return
 }
 
+func hashFileName(file string) string {
+	dirPath := filepath.Dir(file)
+	prefix := strings.Replace(dir, filepath.Separator, "_", -1)
+	return prefix + filepath.Base(file)
+}
+
 type FileTranslator func(string) (string, error)
 
 // TODO(jwall): Okay large file support without having to load the entire file
@@ -122,6 +128,26 @@ type processor struct {
 	index                   Index
 }
 
+func getPdfText(file string) (string, error) {
+	// 1. try pdftotext if it exists.
+	if cmdName, err := exec.LookPath("pdftotext"); err == nil {
+		tmpName := filepath.Join(os.TempDir(), filepath.Base(file)+".txt")
+		cmd := exec.Command(cmdName, file, tmpName)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			log.Printf("output: %q", out)
+			return "", fmt.Errorf("Error converting pdf with %q err: %v", cmd.Args, err)
+		}
+		bs, err := ioutil.ReadFile(tmpName)
+		if err == nil && len(bs) > 0 {
+			log.Printf("Found text of length %d in pdf", len(bs))
+			return string(bs), nil
+		}
+	}
+	log.Printf("Unable to get text from %q with pdftotext", file)
+	return ocrImageFile(file)
+}
+
 func (p *processor) registerDefaults() {
 	p.defaultMimeTypeHandlers = map[string]FileTranslator{
 		"text":                   getPlainTextContent,
@@ -129,7 +155,7 @@ func (p *processor) registerDefaults() {
 		"application/javascript": getPlainTextContent,
 		// TODO(jeremy): We should try the pdf2text application first if
 		// available.
-		"application/pdf": ocrImageFile,
+		"application/pdf": getPdfText,
 	}
 
 }
@@ -163,7 +189,8 @@ func hashFile(file string) ([]byte, error) {
 }
 
 func (p *processor) checkHash(file string, hash []byte) (bool, error) {
-	hashFile := path.Join(p.hashDir, file)
+	hashFile := path.Join(p.hashDir, hashFileName(file))
+	log.Printf("Checking for hashfile %q")
 	if _, err := os.Stat(hashFile); os.IsNotExist(err) {
 		return false, nil
 	}
@@ -199,7 +226,7 @@ func (p *processor) finishFile(file string) error {
 		}
 	}
 
-	fd, err := os.Create(filepath.Join(p.hashDir, file))
+	fd, err := os.Create(filepath.Join(p.hashDir, hashFileName(file)))
 	defer fd.Close()
 	if err != nil {
 		return err
@@ -219,7 +246,7 @@ func (p *processor) ShouldProcess(file string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if ok, _ := p.checkHash(filepath.Base(file), h); ok {
+	if ok, _ := p.checkHash(file, h); ok {
 		log.Printf("Already indexed %q", file)
 		return false, nil
 	}
@@ -231,10 +258,10 @@ func (p *processor) Process(file string) error {
 	ext := filepath.Ext(file)
 	// TODO(jwall): Do I want to do anything with the params?
 	mt, _, err := mime.ParseMediaType(mime.TypeByExtension(ext))
-	parts := strings.SplitN(mt, "/", 2)
 	if err != nil {
-		return fmt.Errorf("Error hashing file %q", err)
+		return fmt.Errorf("Unrecognized mime type %q", err)
 	}
+	parts := strings.SplitN(mt, "/", 2)
 	fd := FileData{
 		MimeType: mt,
 		FileName: filepath.Base(file),
