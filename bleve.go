@@ -41,7 +41,7 @@ func buildHtmlDocumentMapping() *bleve.DocumentMapping {
 }
 
 type Index interface {
-	Index(data *FileData) error
+	Put(data *FileData) error
 	Query(terms []string) (string, error)
 	Close() error
 }
@@ -50,7 +50,7 @@ type bleveIndex struct {
 	index bleve.Index
 }
 
-func (i *bleveIndex) Index(data *FileData) error {
+func (i *bleveIndex) Put(data *FileData) error {
 	if err := i.index.Index(data.FileName, data); err != nil {
 		return fmt.Errorf("Error writing to index: %q", err)
 	}

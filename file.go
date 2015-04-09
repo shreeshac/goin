@@ -135,13 +135,15 @@ type FileProcessor interface {
 	ShouldProcess(file string) (bool, error)
 	Process(file string) error
 	Register(mime string, ft FileTranslator) error
+	// FileProcessors also implement the Index interface.
+	Index
 }
 
 type processor struct {
 	defaultMimeTypeHandlers map[string]FileTranslator
 	hashDir                 string
-	index                   Index
 	force                   bool
+	Index
 }
 
 func getPdfText(file string) (string, error) {
@@ -175,7 +177,7 @@ func (p *processor) registerDefaults() {
 }
 
 func NewProcessor(hashDir string, index Index, force bool) FileProcessor {
-	p := &processor{hashDir: hashDir, index: index, force: force}
+	p := &processor{hashDir: hashDir, Index: index, force: force}
 	p.registerDefaults()
 	return p
 }
@@ -306,7 +308,7 @@ func (p *processor) Process(file string) error {
 		return fmt.Errorf("Unhandled file format %q", mt)
 	}
 	log.Printf("Indexing %q", fd.FullPath)
-	if err := p.index.Index(&fd); err != nil {
+	if err := p.Put(&fd); err != nil {
 		return err
 	}
 	return p.finishFile(fd.FullPath)
