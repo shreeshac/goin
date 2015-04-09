@@ -13,7 +13,7 @@ in progress.
 Usage
 =====
 
-goin --help will give you an overview of the flags to tweak it's operation.
+`goin --help` will give you an overview of the flags to tweak it's operation.
 
 Install
 =======
