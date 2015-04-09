@@ -71,7 +71,7 @@ func main() {
 		fmt.Println(result)
 		return
 	} else if *isIndex {
-		p := NewProcessor(*hashLocation, index)
+		p := NewProcessor(*hashLocation, index, *force)
 		for _, file := range flag.Args() {
 			fi, err := os.Stat(file)
 			if os.IsNotExist(err) {

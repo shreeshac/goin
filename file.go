@@ -34,7 +34,7 @@ func defaultTessData() (possible string) {
 
 func hashFileName(file string) string {
 	dirPath := filepath.Dir(file)
-	prefix := strings.Replace(dir, filepath.Separator, "_", -1)
+	prefix := strings.Replace(dirPath, string(filepath.Separator), "_", -1)
 	return prefix + filepath.Base(file)
 }
 
@@ -110,6 +110,7 @@ type FileData struct {
 	MimeType  string
 	IndexTime time.Time
 	Text      string
+	Size      int64
 }
 
 func (fd *FileData) Type() string {
@@ -126,6 +127,7 @@ type processor struct {
 	defaultMimeTypeHandlers map[string]FileTranslator
 	hashDir                 string
 	index                   Index
+	force                   bool
 }
 
 func getPdfText(file string) (string, error) {
@@ -139,7 +141,7 @@ func getPdfText(file string) (string, error) {
 			return "", fmt.Errorf("Error converting pdf with %q err: %v", cmd.Args, err)
 		}
 		bs, err := ioutil.ReadFile(tmpName)
-		if err == nil && len(bs) > 0 {
+		if err == nil && len(bs) > 80 { // Sanity check that at least 80 characters where found.
 			log.Printf("Found text of length %d in pdf", len(bs))
 			return string(bs), nil
 		}
@@ -153,15 +155,13 @@ func (p *processor) registerDefaults() {
 		"text":                   getPlainTextContent,
 		"image":                  ocrImageFile,
 		"application/javascript": getPlainTextContent,
-		// TODO(jeremy): We should try the pdf2text application first if
-		// available.
-		"application/pdf": getPdfText,
+		"application/pdf":        getPdfText,
 	}
 
 }
 
-func NewProcessor(hashDir string, index Index) FileProcessor {
-	p := &processor{hashDir: hashDir, index: index}
+func NewProcessor(hashDir string, index Index, force bool) FileProcessor {
+	p := &processor{hashDir: hashDir, index: index, force: force}
 	p.registerDefaults()
 	return p
 }
@@ -238,8 +238,8 @@ func (p *processor) finishFile(file string) error {
 
 func (p *processor) ShouldProcess(file string) (bool, error) {
 	fi, err := os.Stat(file)
-	if fi.Size() > 1000000 {
-		return false, fmt.Errorf("File too large to index %q", file)
+	if !p.force && fi.Size() > *maxFileSize {
+		return false, fmt.Errorf("File too large to index %q size=(%d)", file, fi.Size())
 	}
 
 	h, err := hashFile(file)
@@ -254,7 +254,10 @@ func (p *processor) ShouldProcess(file string) (bool, error) {
 }
 
 func (p *processor) Process(file string) error {
-	// TODO(jeremy): Move the hashing part out of here.
+	fi, err := os.Stat(file)
+	if os.IsNotExist(err) {
+		return err // In theory this will never happen
+	}
 	ext := filepath.Ext(file)
 	// TODO(jwall): Do I want to do anything with the params?
 	mt, _, err := mime.ParseMediaType(mime.TypeByExtension(ext))
@@ -268,6 +271,7 @@ func (p *processor) Process(file string) error {
 		FullPath: path.Clean(file),
 		// How to index this properly?
 		IndexTime: time.Now(),
+		Size:      fi.Size(),
 	}
 	log.Printf("Detected mime category: %q", parts[0])
 	if ft, exists := p.defaultMimeTypeHandlers[mt]; exists {

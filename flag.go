@@ -3,7 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"path/filepath"
 	"strings"
+
+	homedir "github.com/mitchellh/go-homedir"
 )
 
 type StringMapFlag map[string]string
@@ -27,11 +30,15 @@ func mimeFlag(name, usage string) StringMapFlag {
 	return mimeTypeMappings
 }
 
+var homeDir, _ = homedir.Dir()
+
 var tessData = flag.String("tess_data_prefix", defaultTessData(), "Location of the tesseract data.")
 var help = flag.Bool("help", false, "Show this help.")
 var pdfDensity = flag.Int("pdfdensity", 300, "density to use when converting pdf's to tiffs.")
-var indexLocation = flag.String("index_location", "index.bleve", "Location for the bleve index.")
-var hashLocation = flag.String("hash_location", ".indexed_files", "Location where the indexed file hashes are stored.")
+var indexLocation = flag.String("index_location", filepath.Join(homeDir, ".index.bleve"), "Location for the bleve index.")
+var hashLocation = flag.String("hash_location", filepath.Join(homeDir, ".indexed_files"), "Location where the indexed file hashes are stored.")
 var isQuery = flag.Bool("query", false, "Run a query instead of indexing")
 var isIndex = flag.Bool("index", false, "Run an indexing operation instead of querying")
 var mimeTypeMappings = mimeFlag("mime", "Add a custom mime type mapping.")
+var maxFileSize = flag.Int64("max_file_size", -1, "Maximum size of file to index. A size of -1 means no limit.")
+var force = flag.Bool("force", false, "Force an index even if the file hasn't changed")
