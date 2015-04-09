@@ -257,6 +257,9 @@ func (p *processor) finishFile(file string) error {
 // false, error if it should not be processed.
 func (p *processor) ShouldProcess(file string) (bool, error) {
 	fi, err := os.Stat(file)
+	if _, mt, ok := p.checkMimeType(file); !ok {
+		return ok, fmt.Errorf("Unhandled FileType: %q", mt)
+	}
 	if p.force && fi.Size() > *maxFileSize {
 		return false, fmt.Errorf("File too large to index %q size=(%d)", file, fi.Size())
 	}
@@ -272,34 +275,39 @@ func (p *processor) ShouldProcess(file string) (bool, error) {
 	return true, nil
 }
 
+func (p *processor) checkMimeType(file string) (FileTranslator, string, bool) {
+	// TODO(jwall): Do I want to do anything with the params?
+	// Check to see if this is a handleable file
+	mt, _, err := mime.ParseMediaType(mime.TypeByExtension(filepath.Ext(file)))
+	if err != nil {
+		return nil, mt, false
+	}
+	parts := strings.SplitN(mt, "/", 2)
+	if ft, exists := p.defaultMimeTypeHandlers[mt]; exists {
+		return ft, mt, exists
+	} else if ft, exists := p.defaultMimeTypeHandlers[parts[0]]; exists {
+		return ft, mt, exists
+	} else {
+		return nil, mt, false //fmt.Errorf("Unhandled file format %q", mt)
+	}
+}
+
 // Process indexes a file.
 func (p *processor) Process(file string) error {
 	fi, err := os.Stat(file)
 	if os.IsNotExist(err) {
 		return err // In theory this will never happen
 	}
-	ext := filepath.Ext(file)
-	// TODO(jwall): Do I want to do anything with the params?
-	mt, _, err := mime.ParseMediaType(mime.TypeByExtension(ext))
-	if err != nil {
-		return fmt.Errorf("Unrecognized mime type %q", err)
-	}
-	parts := strings.SplitN(mt, "/", 2)
 	fd := FileData{
-		MimeType: mt,
 		FileName: filepath.Base(file),
 		FullPath: path.Clean(file),
 		// How to index this properly?
 		IndexTime: time.Now(),
 		Size:      fi.Size(),
 	}
-	log.Printf("Detected mime category: %q", parts[0])
-	if ft, exists := p.defaultMimeTypeHandlers[mt]; exists {
-		fd.Text, err = ft(file)
-		if err != nil {
-			return err
-		}
-	} else if ft, exists := p.defaultMimeTypeHandlers[parts[0]]; exists {
+	ft, mt, ok := p.checkMimeType(file)
+	if ok {
+		fd.MimeType = mt
 		fd.Text, err = ft(file)
 		if err != nil {
 			return err
@@ -307,6 +315,9 @@ func (p *processor) Process(file string) error {
 	} else {
 		return fmt.Errorf("Unhandled file format %q", mt)
 	}
+
+	parts := strings.SplitN(mt, "/", 2)
+	log.Printf("Detected mime category: %q", parts[0])
 	log.Printf("Indexing %q", fd.FullPath)
 	if err := p.Put(&fd); err != nil {
 		return err

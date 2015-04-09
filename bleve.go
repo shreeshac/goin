@@ -51,7 +51,7 @@ type bleveIndex struct {
 }
 
 func (i *bleveIndex) Put(data *FileData) error {
-	if err := i.index.Index(data.FileName, data); err != nil {
+	if err := i.index.Index(data.FullPath, data); err != nil {
 		return fmt.Errorf("Error writing to index: %q", err)
 	}
 	return nil
