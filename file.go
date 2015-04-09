@@ -154,7 +154,7 @@ func getPdfText(file string) (string, error) {
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			log.Printf("output: %q", out)
-			return "", fmt.Errorf("Error converting pdf with %q err: %v", cmd.Args, err)
+			log.Printf("Error converting pdf with %q err: %v", cmd.Args, err)
 		}
 		bs, err := ioutil.ReadFile(tmpName)
 		if err == nil && len(bs) > 80 { // Sanity check that at least 80 characters where found.

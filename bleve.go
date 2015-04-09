@@ -11,8 +11,8 @@ import (
 
 	"github.com/blevesearch/bleve"
 	"github.com/blevesearch/bleve/analysis"
-	"github.com/blevesearch/bleve/analysis/analyzers/standard_analyzer"
 	"github.com/blevesearch/bleve/analysis/char_filters/html_char_filter"
+	"github.com/blevesearch/bleve/analysis/language/en"
 	"github.com/blevesearch/bleve/registry"
 )
 
@@ -21,7 +21,7 @@ const htmlMimeType = "text/html"
 // handle text/html types
 func init() {
 	registry.RegisterAnalyzer(htmlMimeType, func(config map[string]interface{}, cache *registry.Cache) (*analysis.Analyzer, error) {
-		a, err := standard_analyzer.AnalyzerConstructor(config, cache)
+		a, err := en.AnalyzerConstructor(config, cache)
 		if err != nil {
 			if cf, err := cache.CharFilterNamed(html_char_filter.Name); err == nil {
 				a.CharFilters = []analysis.CharFilter{cf}
@@ -81,6 +81,7 @@ func NewIndex(indexLocation string) (Index, error) {
 	var index bleve.Index
 	if _, err := os.Stat(indexLocation); os.IsNotExist(err) {
 		mapping := bleve.NewIndexMapping()
+		mapping.DefaultAnalyzer = "en"
 		mapping.AddDocumentMapping(htmlMimeType, buildHtmlDocumentMapping())
 		// TODO(jwall): Create document mappings for our custom types.
 		log.Printf("Creating new index %q", indexLocation)

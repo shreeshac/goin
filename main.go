@@ -52,7 +52,7 @@ func formatFragment(frag string) string {
 	lines := strings.Split(content, "\n")
 	rv := ""
 	for _, l := range lines {
-		rv += fmt.Sprintln("\t> %s", l)
+		rv += fmt.Sprintf("\t> %s\n", l)
 	}
 	return rv + fmt.Sprintln("-----------------")
 }
