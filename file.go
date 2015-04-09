@@ -207,7 +207,7 @@ func hashFile(file string) ([]byte, error) {
 
 func (p *processor) checkHash(file string, hash []byte) (bool, error) {
 	hashFile := path.Join(p.hashDir, hashFileName(file))
-	log.Printf("Checking for hashfile %q")
+	log.Printf("Checking for hashfile %q", hashFile)
 	if _, err := os.Stat(hashFile); os.IsNotExist(err) {
 		return false, nil
 	}
@@ -257,7 +257,7 @@ func (p *processor) finishFile(file string) error {
 // false, error if it should not be processed.
 func (p *processor) ShouldProcess(file string) (bool, error) {
 	fi, err := os.Stat(file)
-	if !p.force && fi.Size() > *maxFileSize {
+	if p.force && fi.Size() > *maxFileSize {
 		return false, fmt.Errorf("File too large to index %q size=(%d)", file, fi.Size())
 	}
 
