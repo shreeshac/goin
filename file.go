@@ -41,6 +41,8 @@ func hashFileName(file string) string {
 	return prefix + filepath.Base(file)
 }
 
+// FileTranslators turn a file into text. The get registered in a FileProcessor
+// using the FileProcessor.Register method call.
 type FileTranslator func(string) (string, error)
 
 // TODO(jwall): Okay large file support without having to load the entire file
@@ -107,19 +109,28 @@ func getPlainTextContent(file string) (string, error) {
 	return string(bs), nil
 }
 
+// FileData represents the data about a file to be indexed.
 type FileData struct {
-	FullPath  string
-	FileName  string
-	MimeType  string
+	// Full path to the file on disk.
+	FullPath string
+	// Basename of the file.
+	FileName string
+	// MimeType of the file.
+	MimeType string
+	// Time of last index.
 	IndexTime time.Time
-	Text      string
-	Size      int64
+	// Text content of the file.
+	Text string
+	// Size of the file.
+	Size int64
 }
 
+// Type satisifies the bleve.Classifier interface for FileData.
 func (fd *FileData) Type() string {
 	return fd.MimeType
 }
 
+// FileProcessor is the interface FileProcessors must implement to handle a file.
 type FileProcessor interface {
 	ShouldProcess(file string) (bool, error)
 	Process(file string) error
@@ -169,6 +180,7 @@ func NewProcessor(hashDir string, index Index, force bool) FileProcessor {
 	return p
 }
 
+// Register registers a mime type with a FileTranslator.
 func (p *processor) Register(mime string, ft FileTranslator) error {
 	if _, exists := p.defaultMimeTypeHandlers[mime]; exists {
 		return fmt.Errorf("Attempt to register already existing mime type FileTranslator %q", mime)
@@ -239,6 +251,8 @@ func (p *processor) finishFile(file string) error {
 	return err
 }
 
+// ShouldProcess returns true, nil if the file should be processed.
+// false, error if it should not be processed.
 func (p *processor) ShouldProcess(file string) (bool, error) {
 	fi, err := os.Stat(file)
 	if !p.force && fi.Size() > *maxFileSize {
@@ -256,6 +270,7 @@ func (p *processor) ShouldProcess(file string) (bool, error) {
 	return true, nil
 }
 
+// Process indexes a file.
 func (p *processor) Process(file string) error {
 	fi, err := os.Stat(file)
 	if os.IsNotExist(err) {

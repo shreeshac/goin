@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-// Entry points
+// IndexFile indexes a single file using the provided FileProcessor
 func IndexFile(file string, p FileProcessor) {
 	log.Printf("Processing file: %q", file)
 	err := p.Process(file)
@@ -24,6 +24,8 @@ func IndexFile(file string, p FileProcessor) {
 	return
 }
 
+// IndexFile indexes all the files in a directory recursively using
+// the provided FileProcessor. It skips the directories it uses for storage.
 func IndexDirectory(dir string, p FileProcessor) {
 	log.Printf("Processing directory: %q", dir)
 	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
