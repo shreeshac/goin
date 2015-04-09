@@ -42,7 +42,7 @@ func buildHtmlDocumentMapping() *bleve.DocumentMapping {
 
 type Index interface {
 	Put(data *FileData) error
-	Query(terms []string) (string, error)
+	Query(terms []string) (*bleve.SearchResult, error)
 	Close() error
 }
 
@@ -57,7 +57,7 @@ func (i *bleveIndex) Put(data *FileData) error {
 	return nil
 }
 
-func (i *bleveIndex) Query(terms []string) (string, error) {
+func (i *bleveIndex) Query(terms []string) (*bleve.SearchResult, error) {
 	searchQuery := strings.Join(terms, " ")
 	query := bleve.NewQueryStringQuery(searchQuery)
 	// TODO(jwall): limit, skip, and explain should be configurable.
@@ -68,9 +68,9 @@ func (i *bleveIndex) Query(terms []string) (string, error) {
 	result, err := i.index.Search(request)
 	if err != nil {
 		log.Printf("Search Error: %q", err)
-		return "", err
+		return nil, err
 	}
-	return fmt.Sprintln(result), nil
+	return result, nil
 }
 
 func (i *bleveIndex) Close() error {

@@ -47,6 +47,16 @@ func IndexDirectory(dir string, p FileProcessor) {
 	})
 }
 
+func formatFragment(frag string) string {
+	content := fmt.Sprintf("%s", frag)
+	lines := strings.Split(content, "\n")
+	rv := ""
+	for _, l := range lines {
+		rv += fmt.Sprintln("\t> %s", l)
+	}
+	return rv + fmt.Sprintln("-----------------")
+}
+
 func main() {
 	flag.Parse()
 
@@ -79,7 +89,24 @@ func main() {
 			log.Printf("Error: %q", err)
 			os.Exit(1)
 		}
-		fmt.Println(result)
+		fmt.Printf("Total results: %d show from %d to %d in %s\n", result.Total, result.Request.From+1, result.Request.From+len(result.Hits), result.Took)
+		for i, match := range result.Hits {
+			fmt.Println("-----------------")
+			fmt.Printf("%d. %q (%f)\n", i+1, match.ID, match.Score)
+			for field, fragments := range match.Fragments {
+				fmt.Printf("%s:\n", field)
+				for _, frag := range fragments {
+					fmt.Println(formatFragment(frag))
+				}
+				for fieldName, fieldValue := range match.Fields {
+					if _, ok := match.Fragments[fieldName]; !ok {
+						fmt.Printf("%s:\n", fieldName)
+						fmt.Println(formatFragment(fmt.Sprint(fieldValue)))
+					}
+				}
+			}
+		}
+		// TODO(jwall): handle facet outputs?
 		return
 	} else if *isIndex {
 		p := NewProcessor(*hashLocation, index, *force)
