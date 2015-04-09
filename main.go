@@ -57,11 +57,22 @@ func formatFragment(frag string) string {
 	return rv + fmt.Sprintln("-----------------")
 }
 
+func usage() string {
+	return fmt.Sprintln("") +
+		fmt.Sprintln("Indexing: \n\tgoindexer [options] --index <locations to index>") +
+		fmt.Sprintln("Querying: \n\tgoindexer [options] --query <search query>") +
+		fmt.Sprintln("") +
+		fmt.Sprintln("The locations to index can be a list of directories or files.") +
+		fmt.Sprintln("") +
+		fmt.Sprintln("The search query is in the syntax documented at: https://github.com/blevesearch/bleve/wiki/Query%20String%20Query.") +
+		fmt.Sprintln("")
+}
+
 func main() {
 	flag.Parse()
 
 	if *help {
-		fmt.Println("goindexer [args] <location to index|search query>")
+		fmt.Println(usage())
 		flag.PrintDefaults()
 		os.Exit(0)
 	}

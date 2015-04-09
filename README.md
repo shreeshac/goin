@@ -13,6 +13,18 @@ in progress.
 Usage
 =====
 
+Indexing:
+
+`goin --index file.txt /path/to/directory/ another.file /another/directory`
+
+Querying:
+
+`goin --query +word -word \"phrase made up of multiple words\" field:word`
+
+Full details of the query syntax can be found at: https://github.com/blevesearch/bleve/wiki/Query%20String%20Query
+
+Help:
+
 `goin --help` will give you an overview of the flags to tweak it's operation.
 
 Install
