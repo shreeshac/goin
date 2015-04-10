@@ -100,7 +100,6 @@ func main() {
 			log.Printf("Error: %q", err)
 			os.Exit(1)
 		}
-		fmt.Printf("Total results: %d show from %d to %d in %s\n", result.Total, result.Request.From+1, result.Request.From+len(result.Hits), result.Took)
 		for i, match := range result.Hits {
 			fmt.Println("-----------------")
 			fmt.Printf("%d. %q (%f)\n", i+1, match.ID, match.Score)
@@ -118,6 +117,7 @@ func main() {
 			}
 		}
 		// TODO(jwall): handle facet outputs?
+		fmt.Printf("Total results: %d Retrieved %d to %d in %s.\n", result.Total, result.Request.From+1, result.Request.From+len(result.Hits), result.Took)
 		return
 	} else if *isIndex {
 		p := NewProcessor(*hashLocation, index, *force)
