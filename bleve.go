@@ -61,7 +61,7 @@ func (i *bleveIndex) Query(terms []string) (*bleve.SearchResult, error) {
 	searchQuery := strings.Join(terms, " ")
 	query := bleve.NewQueryStringQuery(searchQuery)
 	// TODO(jwall): limit, skip, and explain should be configurable.
-	request := bleve.NewSearchRequestOptions(query, 10, 0, false)
+	request := bleve.NewSearchRequestOptions(query, *limit, *from, false)
 	// TODO(jwall): This should be configurable too.
 	request.Highlight = bleve.NewHighlightWithStyle("ansi")
 
