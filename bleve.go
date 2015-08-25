@@ -13,6 +13,7 @@ import (
 	"github.com/blevesearch/bleve/analysis"
 	"github.com/blevesearch/bleve/analysis/char_filters/html_char_filter"
 	"github.com/blevesearch/bleve/analysis/language/en"
+	_ "github.com/blevesearch/bleve/index/store/goleveldb"
 	"github.com/blevesearch/bleve/registry"
 )
 
@@ -20,6 +21,9 @@ const htmlMimeType = "text/html"
 
 // handle text/html types
 func init() {
+
+	bleve.Config.DefaultKVStore = "goleveldb"
+
 	registry.RegisterAnalyzer(htmlMimeType, func(config map[string]interface{}, cache *registry.Cache) (*analysis.Analyzer, error) {
 		a, err := en.AnalyzerConstructor(config, cache)
 		if err != nil {
