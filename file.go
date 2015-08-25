@@ -256,6 +256,9 @@ func (p *processor) finishFile(file string) error {
 // ShouldProcess returns true, nil if the file should be processed.
 // false, error if it should not be processed.
 func (p *processor) ShouldProcess(file string) (bool, error) {
+	if strings.HasPrefix(file, ".") {
+		return false, fmt.Errorf("Not processing hidden file %q", file)
+	}
 	fi, err := os.Stat(file)
 	if _, mt, ok := p.checkMimeType(file); !ok {
 		return ok, fmt.Errorf("Unhandled FileType: %q", mt)
