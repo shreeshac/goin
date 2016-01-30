@@ -30,6 +30,20 @@ Help:
 Install
 =======
 
+Dependencies
+------------
+
+goin depends on the (leptonica):"http://www.leptonica.com" and (tesseract):"https://github.com/tesseract-ocr" libraries to build.
+
+Depending on how you install them you may have to set the CGO_CFLAGS and CGO_LDFLAGS environment variables to tell cgo where to find them.
+
+`go doc cmd/go` will give you more information on configuring cgo for your environment.
+
+
+For pdf support goin needs a few extra items. The (ImageMagick):"http://www.imagemagick.org/" convert tool as well as the (xpdf):http://www.foolabs.com/xpdf/" suite of tools. 
+Goin uses these first to try to get text out of the pdf and falling back to OCR if the pdf is only images.
+
+Installing goin
+------------------
 `go get bitbucket.org/zaphar/goin` will install the tool.
 
-For pdf support goin needs a few extra items. The ImageMagick convert tool as well as the xpdf suite of tools. Goin uses these to first try to get text out of the pdf and falling back to OCR if the pdf is only images.
