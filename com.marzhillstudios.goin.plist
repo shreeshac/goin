@@ -4,10 +4,9 @@
 <dict>
   <key>Label</key>
   <string>com.marzhillstudios.goin</string>
-  <key>Program</key>
-  <string>/Users/changme/lib/go/bin/goin</string>
   <key>ProgramArguments</key>
   <array>
+    <string>/Users/changme/lib/go/bin/goin</string>
     <string>--hash_location</string>
       <string>/Users/changme/.goin/indexed_files</string>
     <string>--index_location</string>
