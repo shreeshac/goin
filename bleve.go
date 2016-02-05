@@ -15,6 +15,7 @@ import (
 	"github.com/blevesearch/bleve/analysis/language/en"
 	_ "github.com/blevesearch/bleve/index/store/goleveldb"
 	"github.com/blevesearch/bleve/registry"
+	"github.com/blevesearch/bleve/search/highlight/highlighters/ansi"
 )
 
 const htmlMimeType = "text/html"
@@ -66,8 +67,11 @@ func (i *bleveIndex) Query(terms []string) (*bleve.SearchResult, error) {
 	query := bleve.NewQueryStringQuery(searchQuery)
 	// TODO(jwall): limit, skip, and explain should be configurable.
 	request := bleve.NewSearchRequestOptions(query, *limit, *from, false)
-	// TODO(jwall): This should be configurable too.
-	request.Highlight = bleve.NewHighlightWithStyle("ansi")
+	if *useHighlight {
+		request.Highlight = bleve.NewHighlightWithStyle(ansi.Name)
+	} else {
+		request.Highlight = bleve.NewHighlight()
+	}
 
 	result, err := i.index.Search(request)
 	if err != nil {
